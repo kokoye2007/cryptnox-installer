@@ -26,19 +26,31 @@ fi
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-# Download source from PyPI
+# Download source from PyPI (using curl for reliability in CI)
 echo "Downloading ${PKG_NAME} ${VERSION} from PyPI..."
-pip3 download --no-deps --no-binary :all: "${PKG_NAME}==${VERSION}"
+PKG_NAME_UNDERSCORE="${PKG_NAME//-/_}"
+TAR_FILE="${PKG_NAME_UNDERSCORE}-${VERSION}.tar.gz"
+PYPI_URL="https://files.pythonhosted.org/packages/source/${PKG_NAME_UNDERSCORE:0:1}/${PKG_NAME_UNDERSCORE}/${TAR_FILE}"
 
-# Extract source
-TAR_FILE=$(ls ${PKG_NAME}*.tar.gz 2>/dev/null || ls ${PKG_NAME//-/_}*.tar.gz)
+if ! curl -fsSL -o "${TAR_FILE}" "${PYPI_URL}"; then
+    # Fallback: get URL from PyPI JSON API
+    echo "Direct download failed, trying PyPI API..."
+    PYPI_URL=$(curl -s "https://pypi.org/pypi/${PKG_NAME}/${VERSION}/json" | \
+        python3 -c "import sys,json; urls=json.load(sys.stdin)['urls']; print(next(u['url'] for u in urls if u['packagetype']=='sdist'))")
+    curl -fsSL -o "${TAR_FILE}" "${PYPI_URL}"
+fi
 echo "Extracting ${TAR_FILE}..."
 tar -xzf "${TAR_FILE}"
 
-# Find extracted directory
-SRC_DIR=$(find . -maxdepth 1 -type d -name "${PKG_NAME}*" -o -name "${PKG_NAME//-/_}*" | grep -v "^\.$" | head -1)
-if [ -z "${SRC_DIR}" ]; then
-    SRC_DIR=$(find . -maxdepth 1 -type d ! -name "." | head -1)
+# Find extracted directory (usually package_name-version)
+SRC_DIR="${PKG_NAME_UNDERSCORE}-${VERSION}"
+if [ ! -d "${SRC_DIR}" ]; then
+    SRC_DIR=$(find . -maxdepth 1 -type d -name "${PKG_NAME}*" -o -name "${PKG_NAME_UNDERSCORE}*" | grep -v "^\.$" | head -1)
+fi
+if [ -z "${SRC_DIR}" ] || [ ! -d "${SRC_DIR}" ]; then
+    echo "Error: Could not find extracted source directory"
+    ls -la
+    exit 1
 fi
 
 # Rename to Debian standard format
