@@ -1,0 +1,12 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE = 1
+export PYBUILD_NAME = cryptnox-cli
+# Disable tests during build (deps not available at build time)
+export PYBUILD_DISABLE = test
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_auto_test:
+	@echo "Skipping tests (dependencies installed at runtime)"

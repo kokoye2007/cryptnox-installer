@@ -1,0 +1,36 @@
+Source: cryptnox-cli
+Section: utils
+Priority: optional
+Maintainer: Ko Ko Ye <kokoye2007@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               python3-all,
+               python3-setuptools,
+               python3-pip,
+               pybuild-plugin-pyproject,
+               swig,
+               libpcsclite-dev,
+               pcscd
+Standards-Version: 4.6.2
+Homepage: https://www.cryptnox.com
+Vcs-Git: https://github.com/Cryptnox-Software/cryptnox-cli.git
+Vcs-Browser: https://github.com/Cryptnox-Software/cryptnox-cli
+Rules-Requires-Root: no
+
+Package: cryptnox-cli
+Architecture: any
+Depends: ${python3:Depends},
+         ${shlibs:Depends},
+         ${misc:Depends},
+         pcscd,
+         libpcsclite1,
+         python3-pyscard,
+         python3-cryptography
+Description: CLI for managing Cryptnox smart card wallets
+ cryptnox-cli is a command-line interface for managing Cryptnox Smart cards,
+ enabling secure seed initialization and cryptographic signing for Bitcoin
+ and Ethereum.
+ .
+ Supported hardware:
+  - Cryptnox Smart cards
+  - Standard PC/SC Smart card Readers (USB NFC reader or USB smart card reader)
