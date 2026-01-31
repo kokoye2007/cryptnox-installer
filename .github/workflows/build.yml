@@ -14,6 +14,7 @@ on:
 jobs:
   build-deb-amd64:
     strategy:
+      fail-fast: true
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
@@ -54,6 +55,7 @@ jobs:
 
   build-deb-arm64:
     strategy:
+      fail-fast: true
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04]
     runs-on: ubuntu-latest
@@ -124,8 +126,16 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f -name "*.deb"
 
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -name "*.deb" -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.deb
+          files: |
+            artifacts/**/*.deb
+            artifacts/SHA256SUMS
           generate_release_notes: true

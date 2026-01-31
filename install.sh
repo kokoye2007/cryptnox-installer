@@ -2,8 +2,11 @@
 # Cryptnox CLI Universal Installer
 # Supports: Native (pip + apt), Snap, Deb
 #
-# Usage: curl -fsSL https://raw.githubusercontent.com/cryptnox-snap/cryptnox-installer/main/install.sh | bash
-#    or: ./install.sh [--native|--snap|--deb]
+# Recommended usage (download first, then run):
+#   wget https://raw.githubusercontent.com/cryptnox-snap/cryptnox-installer/main/install.sh
+#   chmod +x install.sh && ./install.sh
+#
+# Or: ./install.sh [--native|--snap|--deb]
 
 set -e
 
@@ -24,8 +27,62 @@ get_latest_version() {
     curl -fsSL https://pypi.org/pypi/cryptnox-cli/json 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4
 }
 
+# Validate version format (semver-like: X.Y.Z)
+validate_version() {
+    local ver="$1"
+    if [[ ! "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+        log_error "Invalid version format: $ver (expected X.Y.Z)"
+        exit 1
+    fi
+}
+
+# Verify SHA256 checksum
+verify_checksum() {
+    local file="$1"
+    local expected="$2"
+
+    if [ -z "$expected" ]; then
+        log_warn "No checksum provided, skipping verification"
+        return 0
+    fi
+
+    local actual
+    actual=$(sha256sum "$file" | cut -d' ' -f1)
+
+    if [ "$actual" != "$expected" ]; then
+        log_error "Checksum mismatch!"
+        log_error "  Expected: $expected"
+        log_error "  Got:      $actual"
+        rm -f "$file"
+        return 1
+    fi
+
+    log_success "Checksum verified"
+    return 0
+}
+
+# Check if sudo is available
+check_sudo() {
+    if [ "$(id -u)" -eq 0 ]; then
+        SUDO=""
+        return 0
+    fi
+
+    if ! command -v sudo &>/dev/null; then
+        log_error "sudo is required but not installed"
+        log_error "Please run as root or install sudo"
+        exit 1
+    fi
+    SUDO="sudo"
+}
+
 VERSION="${CRYPTNOX_VERSION:-$(get_latest_version)}"
 VERSION="${VERSION:-1.0.3}"
+
+# Validate version if provided
+if [ -n "$VERSION" ]; then
+    validate_version "$VERSION"
+fi
 
 # Detect architecture
 detect_arch() {
@@ -73,12 +130,13 @@ detect_os() {
 
 # Install system dependencies via apt/dnf/etc
 install_system_deps() {
+    check_sudo
     log_info "Installing system dependencies..."
 
-    case $PKG_MANAGER in
+    case "$PKG_MANAGER" in
         apt)
-            sudo apt-get update
-            sudo apt-get install -y \
+            $SUDO apt-get update
+            $SUDO apt-get install -y \
                 pcscd \
                 libpcsclite1 \
                 pcsc-tools \
@@ -89,7 +147,7 @@ install_system_deps() {
                 libpcsclite-dev
             ;;
         dnf|yum)
-            sudo $PKG_MANAGER install -y \
+            $SUDO "$PKG_MANAGER" install -y \
                 pcsc-lite \
                 pcsc-lite-libs \
                 pcsc-tools \
@@ -99,7 +157,7 @@ install_system_deps() {
                 pcsc-lite-devel
             ;;
         pacman)
-            sudo pacman -Syu --noconfirm \
+            $SUDO pacman -Syu --noconfirm \
                 pcsclite \
                 ccid \
                 python-pip \
@@ -107,7 +165,7 @@ install_system_deps() {
                 swig
             ;;
         zypper)
-            sudo zypper install -y \
+            $SUDO zypper install -y \
                 pcsc-lite \
                 pcsc-ccid \
                 python3-pip \
@@ -122,8 +180,8 @@ install_system_deps() {
 
     # Enable pcscd
     if command -v systemctl &>/dev/null; then
-        sudo systemctl enable pcscd 2>/dev/null || true
-        sudo systemctl start pcscd 2>/dev/null || true
+        $SUDO systemctl enable pcscd 2>/dev/null || true
+        $SUDO systemctl start pcscd 2>/dev/null || true
     fi
 
     log_success "System dependencies installed"
@@ -160,18 +218,19 @@ install_native() {
 
 # Install via Snap
 install_snap() {
+    check_sudo
     log_info "Installing via Snap..."
 
     if ! command -v snap &>/dev/null; then
         log_info "Installing snapd..."
-        case $PKG_MANAGER in
+        case "$PKG_MANAGER" in
             apt)
-                sudo apt-get update && sudo apt-get install -y snapd
+                $SUDO apt-get update && $SUDO apt-get install -y snapd
                 ;;
             dnf|yum)
-                sudo $PKG_MANAGER install -y snapd
-                sudo systemctl enable --now snapd.socket
-                sudo ln -sf /var/lib/snapd/snap /snap 2>/dev/null || true
+                $SUDO "$PKG_MANAGER" install -y snapd
+                $SUDO systemctl enable --now snapd.socket
+                $SUDO ln -sf /var/lib/snapd/snap /snap 2>/dev/null || true
                 ;;
             *)
                 log_error "Cannot install snapd automatically"
@@ -180,11 +239,11 @@ install_snap() {
         esac
     fi
 
-    sudo snap install cryptnox
+    $SUDO snap install cryptnox
 
     log_info "Connecting interfaces..."
-    sudo snap connect cryptnox:raw-usb || true
-    sudo snap connect cryptnox:hardware-observe || true
+    $SUDO snap connect cryptnox:raw-usb || true
+    $SUDO snap connect cryptnox:hardware-observe || true
 
     log_success "Installed via Snap"
     log_info "Use: cryptnox.card"
@@ -192,8 +251,9 @@ install_snap() {
 
 # Install via Deb package (experimental - may have dependency issues)
 install_deb() {
+    check_sudo
     log_info "Installing via Deb package..."
-    log_warn "Note: Deb package may have Python dependency issues"
+    log_warn "Note: Deb package requires network access during install"
     log_warn "Consider using --native instead for best compatibility"
 
     if [ "$PKG_MANAGER" != "apt" ]; then
@@ -215,43 +275,62 @@ install_deb() {
         *) OS_VER="ubuntu-22.04" ;;
     esac
 
-    RELEASE_URL="https://github.com/cryptnox-snap/cryptnox-installer/releases/latest/download"
+    RELEASE_URL="https://github.com/cryptnox-snap/cryptnox-installer/releases/download/v${VERSION}"
     DEB_FILE="cryptnox-cli_${VERSION}-1_${ARCH}_${OS_VER}.deb"
+    CHECKSUM_FILE="SHA256SUMS"
 
     log_info "Downloading: ${DEB_FILE}"
-    if curl -fsSL -o "/tmp/${DEB_FILE}" "${RELEASE_URL}/${DEB_FILE}"; then
-        sudo dpkg -i "/tmp/${DEB_FILE}" || sudo apt-get install -f -y
-        rm -f "/tmp/${DEB_FILE}"
-
-        # Install pip dependencies (deb package doesn't include all Python deps)
-        log_info "Installing Python dependencies via pip..."
-        pip3 install --user --break-system-packages cryptnox-sdk-py lazy-import tabulate 2>/dev/null || \
-        pip3 install --user cryptnox-sdk-py lazy-import tabulate 2>/dev/null || true
-
-        log_success "Installed via Deb"
-        log_info "Use: cryptnox"
-    else
+    if ! curl -fsSL -o "/tmp/${DEB_FILE}" "${RELEASE_URL}/${DEB_FILE}"; then
         log_error "Failed to download deb package"
         log_info "Falling back to native installation..."
         install_native
+        return
     fi
+
+    # Try to verify checksum if available
+    if curl -fsSL -o "/tmp/${CHECKSUM_FILE}" "${RELEASE_URL}/${CHECKSUM_FILE}" 2>/dev/null; then
+        EXPECTED_SUM=$(grep "${DEB_FILE}" "/tmp/${CHECKSUM_FILE}" | cut -d' ' -f1)
+        if ! verify_checksum "/tmp/${DEB_FILE}" "$EXPECTED_SUM"; then
+            log_error "Checksum verification failed!"
+            rm -f "/tmp/${DEB_FILE}" "/tmp/${CHECKSUM_FILE}"
+            exit 1
+        fi
+        rm -f "/tmp/${CHECKSUM_FILE}"
+    else
+        log_warn "Checksum file not available, skipping verification"
+    fi
+
+    $SUDO dpkg -i "/tmp/${DEB_FILE}" || $SUDO apt-get install -f -y
+    rm -f "/tmp/${DEB_FILE}"
+
+    # Install pip dependencies (deb package doesn't include all Python deps)
+    log_info "Installing Python dependencies via pip..."
+    if ! pip3 install --user --break-system-packages cryptnox-sdk-py lazy-import tabulate 2>/dev/null; then
+        if ! pip3 install --user cryptnox-sdk-py lazy-import tabulate 2>/dev/null; then
+            log_warn "Some pip dependencies may not have installed"
+        fi
+    fi
+
+    log_success "Installed via Deb"
+    log_info "Use: cryptnox"
 }
 
 # Uninstall
 uninstall() {
+    check_sudo
     log_info "Uninstalling cryptnox..."
 
     # Snap
     if command -v snap &>/dev/null && snap list cryptnox &>/dev/null 2>&1; then
         log_info "Removing snap..."
-        sudo snap remove cryptnox
+        $SUDO snap remove cryptnox
     fi
 
     # Deb
     if dpkg -l cryptnox-cli 2>/dev/null | grep -q "^ii"; then
         log_info "Removing deb..."
-        sudo apt-get remove -y cryptnox-cli
-        sudo apt-get autoremove -y
+        $SUDO apt-get remove -y cryptnox-cli
+        $SUDO apt-get autoremove -y
     fi
 
     # Pip
@@ -267,19 +346,21 @@ uninstall() {
 # Update
 update() {
     detect_os
+    check_sudo
 
     # Snap
     if command -v snap &>/dev/null && snap list cryptnox &>/dev/null 2>&1; then
         log_info "Updating snap..."
-        sudo snap refresh cryptnox
+        $SUDO snap refresh cryptnox
         return
     fi
 
     # Pip
     if pip3 show cryptnox-cli &>/dev/null 2>&1; then
         log_info "Updating pip package..."
-        pip3 install --user --upgrade cryptnox-cli 2>/dev/null || \
-        pip3 install --user --upgrade --break-system-packages cryptnox-cli 2>/dev/null
+        if ! pip3 install --user --upgrade cryptnox-cli 2>/dev/null; then
+            pip3 install --user --upgrade --break-system-packages cryptnox-cli 2>/dev/null || log_error "Update failed"
+        fi
         return
     fi
 
@@ -337,9 +418,10 @@ status() {
 
 # Setup card reader
 setup_reader() {
+    check_sudo
     log_info "Setting up card reader..."
 
-    cat << 'EOF' | sudo tee /etc/modprobe.d/blacklist-nfc.conf > /dev/null
+    cat << 'EOF' | $SUDO tee /etc/modprobe.d/blacklist-nfc.conf > /dev/null
 # Blacklist NFC modules for PC/SC compatibility
 blacklist nfc
 blacklist pn533

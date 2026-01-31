@@ -4,27 +4,27 @@ set -e
 
 case "$1" in
     configure)
-        # Install Python dependencies from PyPI (not all available in Debian repos)
-        echo "Installing Python dependencies..."
-
-        # All dependencies from cryptnox-cli pyproject.toml
-        DEPS="cryptnox-sdk-py>=1.0.2 lazy-import tabulate argparse appdirs base58 boto3 ecdsa colander pytz requests stdiomask web3"
-
-        # Try with --break-system-packages first (Python 3.11+), fallback to without
-        if pip3 install --break-system-packages --quiet $DEPS 2>/dev/null; then
-            echo "Dependencies installed successfully"
-        elif pip3 install --quiet $DEPS 2>/dev/null; then
-            echo "Dependencies installed successfully"
-        else
-            echo "Warning: Some dependencies may not have installed correctly"
-            echo "Try running: pip3 install cryptnox-cli"
-        fi
-
-        # Ensure pcscd is running
+        # Enable and start pcscd service
         if command -v systemctl &>/dev/null; then
             systemctl enable pcscd 2>/dev/null || true
             systemctl start pcscd 2>/dev/null || true
         fi
+
+        # Note: Python dependencies should be installed by the user
+        # The deb package provides the core files, but Python deps
+        # are better managed via pip to avoid conflicts
+        echo ""
+        echo "========================================"
+        echo "  Cryptnox CLI installed"
+        echo "========================================"
+        echo ""
+        echo "If you encounter import errors, install dependencies:"
+        echo "  pip3 install --user cryptnox-cli"
+        echo ""
+        echo "Or use the installer script for full setup:"
+        echo "  curl -fsSL https://raw.githubusercontent.com/cryptnox-snap/cryptnox-installer/main/install.sh -o install.sh"
+        echo "  chmod +x install.sh && ./install.sh --native"
+        echo ""
         ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

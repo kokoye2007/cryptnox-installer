@@ -15,13 +15,26 @@ PKG_NAME="cryptnox-cli"
 BUILD_DIR="${BUILD_DIR:-$(mktemp -d /tmp/cryptnox-deb-build.XXXXXX)}"
 SKIP_DEPS="${SKIP_DEPS:-false}"
 
+# Validate version format (semver: X.Y.Z or X.Y.Z-suffix)
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+    echo "Error: Invalid version format: $VERSION (expected X.Y.Z)"
+    exit 1
+fi
+
 echo "=== Building ${PKG_NAME} ${VERSION} deb package ==="
 echo "Build directory: ${BUILD_DIR}"
 echo "Repo root: ${REPO_ROOT}"
 
+# Cleanup function
+cleanup() {
+    if [[ -n "${BUILD_DIR}" ]] && [[ -d "${BUILD_DIR}" ]]; then
+        rm -rf "${BUILD_DIR}"
+    fi
+}
+
 # Cleanup previous build if using default location (skip in CI for artifact upload)
 if [[ "${BUILD_DIR}" == /tmp/cryptnox-deb-build.* ]] && [[ "${CI}" != "true" ]]; then
-    trap "rm -rf ${BUILD_DIR}" EXIT
+    trap cleanup EXIT
 fi
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"

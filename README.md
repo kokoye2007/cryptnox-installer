@@ -20,16 +20,20 @@
 
 ## Quick Install
 
+**Recommended** (download first, then run):
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kokoye2007/cryptnox-installer/main/install.sh | bash
+wget https://raw.githubusercontent.com/cryptnox-snap/cryptnox-installer/main/install.sh
+chmod +x install.sh
+./install.sh --native
 ```
 
-Or download and run:
+Or with curl:
 
 ```bash
-wget https://raw.githubusercontent.com/kokoye2007/cryptnox-installer/main/install.sh
+curl -fsSL https://raw.githubusercontent.com/cryptnox-snap/cryptnox-installer/main/install.sh -o install.sh
 chmod +x install.sh
-./install.sh
+./install.sh --native
 ```
 
 ---
